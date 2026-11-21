@@ -1,0 +1,13 @@
+{
+  "name": "bugfix",
+  "description": "Fix a real security bug in existing code and add regression tests. The SSRF filter accepts decimal/hex/octal IP encodings of 127.0.0.1. Shows: brownfield bug fix, regression tests written from the bug report (not from the fix), existing safety tests re-proven, security review, release sign-off.",
+  "requirement": "Bug fix (security): the SSRF protection can be bypassed with alternative IP encodings. http://2130706433/ (decimal), http://0x7f000001/ (hex) and http://0177.0.0.1/ (octal) are accepted, but browsers and HTTP clients send them to 127.0.0.1. Reject non-canonical IP notation and add regression tests.",
+  "source": "url-shortener-service",
+  "referenceDir": "url-shortener-service",
+  "testCommand": "mvn -q -B test",
+  "initiator": "manas",
+  "script": [
+    {"type": "approve", "stage": "design", "as": "alice", "comment": "Reject non-canonical numeric hosts; keep canonical dotted-decimal."},
+    {"type": "approve", "stage": "release", "as": "rahul", "comment": "Security fix approved for release."}
+  ]
+}

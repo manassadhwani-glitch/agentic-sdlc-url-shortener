@@ -1,0 +1,13 @@
+# Test profile: generous rate limits so tests aren't throttled; flushing is driven by tests directly.
+shortener:
+  rate-limit:
+    api-capacity: 100000
+    api-refill-per-second: 100000
+    redirect-capacity: 100000
+    redirect-refill-per-second: 100000
+  analytics:
+    flush-interval-ms: 3600000
+  security:
+    api-keys:
+      - test-key-a
+      - test-key-b

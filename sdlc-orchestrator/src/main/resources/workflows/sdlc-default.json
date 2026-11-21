@@ -1,0 +1,112 @@
+{
+  "name": "sdlc-default",
+  "description": "Requirements → design (sign-off) → plan → [implement ‖ test-design] → verify → [security ‖ docs] → release (sign-off). The planner may insert stages (e.g. migration-check) at runtime.",
+  "stages": [
+    {
+      "id": "requirements",
+      "agent": "requirements",
+      "consumes": ["requirement"],
+      "produces": ["spec"],
+      "exitGates": ["required-outputs", "spec-complete", "compliance-text"],
+      "risk": "LOW",
+      "maxAttempts": 3,
+      "backoffMs": 100
+    },
+    {
+      "id": "design",
+      "agent": "design",
+      "dependsOn": ["requirements"],
+      "consumes": ["spec"],
+      "produces": ["design", "impact"],
+      "entryGates": ["spec-ready"],
+      "exitGates": ["required-outputs", "design-covers-acs"],
+      "risk": "MEDIUM",
+      "maxAttempts": 2,
+      "approval": "always",
+      "approvalRole": "tech-lead",
+      "onReject": "design",
+      "maxReworks": 2
+    },
+    {
+      "id": "plan",
+      "agent": "planner",
+      "dependsOn": ["design"],
+      "consumes": ["spec", "design", "impact"],
+      "produces": ["plan"],
+      "exitGates": ["required-outputs", "plan-valid"],
+      "risk": "LOW",
+      "maxAttempts": 2
+    },
+    {
+      "id": "implement",
+      "agent": "implementation",
+      "dependsOn": ["plan"],
+      "consumes": ["spec", "design", "impact", "plan"],
+      "produces": ["code-changes"],
+      "exitGates": ["required-outputs", "build"],
+      "risk": "MEDIUM",
+      "maxAttempts": 2,
+      "backoffMs": 200,
+      "mutatesWorkspace": true,
+      "writeScope": ["src/main/**", "pom.xml", "README.md"],
+      "maxReworks": 2
+    },
+    {
+      "id": "test-design",
+      "agent": "test-design",
+      "dependsOn": ["plan"],
+      "consumes": ["spec", "plan"],
+      "produces": ["test-cases", "test-changes"],
+      "exitGates": ["required-outputs", "tests-cover-acs"],
+      "risk": "LOW",
+      "maxAttempts": 2,
+      "mutatesWorkspace": true,
+      "writeScope": ["src/test/**"]
+    },
+    {
+      "id": "verify",
+      "agent": "test-runner",
+      "dependsOn": ["implement", "test-design"],
+      "consumes": ["spec", "code-changes", "test-changes", "test-cases"],
+      "produces": ["test-report"],
+      "exitGates": ["required-outputs", "tests-pass", "ac-traceability"],
+      "risk": "LOW",
+      "maxAttempts": 1,
+      "onFailure": "implement"
+    },
+    {
+      "id": "security",
+      "agent": "security-review",
+      "dependsOn": ["verify"],
+      "consumes": ["code-changes", "test-changes"],
+      "produces": ["security-findings"],
+      "exitGates": ["required-outputs", "no-high-findings"],
+      "risk": "LOW",
+      "maxAttempts": 1
+    },
+    {
+      "id": "docs",
+      "agent": "docs",
+      "dependsOn": ["verify"],
+      "consumes": ["spec", "design", "test-report", "code-changes"],
+      "produces": ["docs", "doc-changes"],
+      "exitGates": ["required-outputs"],
+      "risk": "LOW",
+      "maxAttempts": 2,
+      "mutatesWorkspace": true,
+      "writeScope": ["docs/**", "CHANGELOG.md"]
+    },
+    {
+      "id": "release",
+      "agent": "release",
+      "dependsOn": ["security", "docs"],
+      "consumes": ["spec", "test-report", "security-findings", "docs", "migration-check?"],
+      "produces": ["release-checklist", "release-notes"],
+      "exitGates": ["required-outputs", "release-checklist"],
+      "risk": "HIGH",
+      "maxAttempts": 1,
+      "approval": "always",
+      "approvalRole": "release-manager"
+    }
+  ]
+}

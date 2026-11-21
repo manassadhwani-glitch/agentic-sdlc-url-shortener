@@ -1,0 +1,18 @@
+{
+  "name": "ambiguous",
+  "description": "Vague request. Shows: clarifying questions instead of guessing, compliance policy overriding a human answer (raw IPs) with agent self-correction, then a mid-run requirement change that invalidates exactly the affected stages, adds a new stage, and re-requests approvals.",
+  "requirement": "Make links safer and track more stuff about visitors.",
+  "source": "url-shortener-service",
+  "referenceDir": "url-shortener-service",
+  "testCommand": "mvn -q -B test",
+  "initiator": "manas",
+  "script": [
+    {"type": "answer", "question": "Q-safety", "as": "alice", "answer": "1"},
+    {"type": "answer", "question": "Q-visitor-data", "as": "alice", "answer": "2"},
+    {"type": "approve", "stage": "design", "as": "alice", "comment": "Approved."},
+    {"type": "amend", "whenStage": "release", "as": "alice", "requirement": "Make links safer by blocking links to other URL shorteners, and let links expire after an optional expiry time (expired links answer 410). Keep visitor analytics privacy-safe."},
+    {"type": "approve", "stage": "design", "as": "alice", "comment": "Re-approved after the requirement change."},
+    {"type": "approve", "stage": "implement", "as": "alice", "comment": "Migration reviewed."},
+    {"type": "approve", "stage": "release", "as": "rahul", "comment": "Release approved."}
+  ]
+}

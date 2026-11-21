@@ -1,0 +1,16 @@
+{
+  "name": "brownfield",
+  "description": "Add link expiry to the existing service. Shows: impact analysis on real code, planner inserts a migration-check stage at runtime, schema change needs tech-lead approval, injected first-attempt bug caught by tests → journal rollback → rework → re-approval → recovery (MTTR).",
+  "requirement": "Add link expiration: a link can carry an optional expiry time, and once it has expired the redirect must return 410 Gone.",
+  "source": "url-shortener-service",
+  "referenceDir": "url-shortener-service",
+  "testCommand": "mvn -q -B test",
+  "faults": ["implement:naive-first-attempt"],
+  "initiator": "manas",
+  "script": [
+    {"type": "approve", "stage": "design", "as": "alice", "comment": "Additive nullable column, expand/contract. Approved."},
+    {"type": "approve", "stage": "implement", "as": "alice", "comment": "Migration V2 reviewed."},
+    {"type": "approve", "stage": "implement", "as": "alice", "comment": "Re-reviewed the corrected change set."},
+    {"type": "approve", "stage": "release", "as": "rahul", "comment": "Release approved."}
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "_comment": "Demo identities. In production these come from SSO groups. 'manas' is the default run initiator; separation of duties stops him approving his own MEDIUM/HIGH-risk checkpoints.",
+  "approvers": {
+    "manas": ["engineer", "tech-lead"],
+    "alice": ["tech-lead", "product-owner"],
+    "priya": ["security"],
+    "rahul": ["release-manager", "product-owner"]
+  }
+}

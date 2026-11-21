@@ -1,0 +1,9 @@
+{
+  "changes": [
+    {
+      "path": "src/test/java/com/example/shortener/validation/UrlValidatorDenylistTest.java",
+      "op": "CREATE",
+      "content": "package com.example.shortener.validation;\n\nimport org.junit.jupiter.api.Test;\n\nimport java.util.List;\n\nimport static org.assertj.core.api.Assertions.assertThat;\nimport static org.assertj.core.api.Assertions.assertThatThrownBy;\n\n/** AC: links to known third-party URL shorteners are rejected, so a short link cannot hide its real destination. */\nclass UrlValidatorDenylistTest {\n\n    private final UrlValidator validator = new UrlValidator(\"sho.rt\", false);\n\n    @Test\n    void rejectsKnownShorteners() {\n        for (String url : List.of(\"https://bit.ly/3abc\", \"http://tinyurl.com/x\", \"https://t.co/abc\",\n                \"https://www.bit.ly/abc\", \"https://BIT.LY/abc\", \"https://is.gd/q\")) {\n            assertThatThrownBy(() -> validator.validate(url))\n                    .as(url)\n                    .isInstanceOf(InvalidUrlException.class)\n                    .hasMessageContaining(\"shorteners\");\n        }\n    }\n\n    @Test\n    void stillAcceptsNormalDomains() {\n        for (String url : List.of(\"https://example.com\", \"https://notbit.ly.example.com/\", \"https://mybit.ly/\", \"https://t.company.com/\")) {\n            assertThat(validator.validate(url)).as(url).isEqualTo(url);\n        }\n    }\n}\n"
+    }
+  ]
+}

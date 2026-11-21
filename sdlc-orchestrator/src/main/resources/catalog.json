@@ -1,0 +1,163 @@
+{
+  "_comment": "Domain knowledge for deterministic (offline) agents. Each acceptance criterion names the tests that verify it; the ac-traceability gate enforces that those tests ran and passed.",
+  "features": [
+    {
+      "id": "core-shorten",
+      "title": "Create short links",
+      "keywords": ["shorten long", "shorten url", "shorten a url", "url shortener service", "build a url shortener", "create short links"],
+      "components": ["api", "service", "code", "domain", "repository"],
+      "presentIf": "src/main/java/com/example/shortener/api/UrlController.java",
+      "playbook": "reference",
+      "testPlaybook": "reference",
+      "criteria": [
+        {"text": "POST /api/v1/urls returns 201 with a 7-character short code for a valid http(s) URL", "verifiedBy": ["UrlApiIntegrationTest#createThenRedirect"]},
+        {"text": "Generated codes are unique and non-sequential (no collisions by construction)", "verifiedBy": ["ShortCodeCodecTest#codesAreFixedLengthAndUnique", "ShortCodeCodecTest#consecutiveIdsDoNotProduceAdjacentCodes"]}
+      ]
+    },
+    {
+      "id": "redirect",
+      "title": "Redirect",
+      "keywords": ["redirect"],
+      "components": ["api", "service"],
+      "presentIf": "src/main/java/com/example/shortener/api/RedirectController.java",
+      "playbook": "reference",
+      "testPlaybook": "reference",
+      "criteria": [
+        {"text": "GET /{code} answers 302 to the target URL; unknown codes answer 404", "verifiedBy": ["UrlApiIntegrationTest#createThenRedirect", "UrlApiIntegrationTest#unknownCodeIs404"]}
+      ]
+    },
+    {
+      "id": "custom-alias",
+      "title": "Custom aliases",
+      "keywords": ["alias", "custom code"],
+      "components": ["validation", "service", "idempotency"],
+      "presentIf": "src/main/java/com/example/shortener/validation/AliasPolicy.java",
+      "playbook": "reference",
+      "testPlaybook": "reference",
+      "criteria": [
+        {"text": "Custom aliases are unique: a duplicate answers 409, including under concurrent requests", "verifiedBy": ["UrlApiIntegrationTest#customAliasAndConflict", "ConcurrencyIntegrationTest#concurrentRequestsForSameAliasProduceExactlyOneLink"]}
+      ]
+    },
+    {
+      "id": "stats",
+      "title": "Click analytics",
+      "keywords": ["analytics", "stats", "click"],
+      "components": ["analytics", "repository"],
+      "presentIf": "src/main/java/com/example/shortener/analytics/AnalyticsService.java",
+      "playbook": "reference",
+      "testPlaybook": "reference",
+      "criteria": [
+        {"text": "GET /api/v1/urls/{code}/stats returns total clicks, a daily series, top referrers and browser families", "verifiedBy": ["UrlApiIntegrationTest#statsAggregateClicks"]},
+        {"text": "Recording analytics never blocks or fails a redirect (bounded async queue; drops are counted)", "verifiedBy": ["ClickRecorderTest#dropsAndCountsWhenQueueIsFull", "ClickRecorderTest#flushFailureIsContainedAndCounted"]}
+      ]
+    },
+    {
+      "id": "idempotency",
+      "title": "Idempotent create",
+      "keywords": ["idempot", "retry-safe", "reliab"],
+      "components": ["idempotency"],
+      "presentIf": "src/main/java/com/example/shortener/idempotency/LinkCreationFacade.java",
+      "playbook": "reference",
+      "testPlaybook": "reference",
+      "criteria": [
+        {"text": "Create is idempotent per Idempotency-Key: a retry replays the same link, a different body answers 422", "verifiedBy": ["UrlApiIntegrationTest#idempotentCreateReplaysSameResult", "ConcurrencyIntegrationTest#concurrentRetriesWithSameIdempotencyKeyCreateOneLink"]}
+      ]
+    },
+    {
+      "id": "rate-limit",
+      "title": "Rate limiting",
+      "keywords": ["rate limit", "rate-limit", "throttl", "reliab"],
+      "components": ["ratelimit"],
+      "presentIf": "src/main/java/com/example/shortener/ratelimit/RateLimitFilter.java",
+      "playbook": "reference",
+      "testPlaybook": "reference",
+      "criteria": [
+        {"text": "API calls are rate-limited per API key and redirects per client IP (429 with Retry-After)", "verifiedBy": ["RateLimitIntegrationTest#apiCallsAreLimitedPerKey", "RateLimitIntegrationTest#redirectsAreLimitedPerIpButHealthIsNot"]}
+      ]
+    },
+    {
+      "id": "url-safety",
+      "title": "Unsafe URL protection",
+      "keywords": ["ssrf", "unsafe url", "internal address", "malicious url"],
+      "components": ["validation"],
+      "presentIf": "src/main/java/com/example/shortener/validation/UrlValidator.java",
+      "playbook": "reference",
+      "testPlaybook": "reference",
+      "criteria": [
+        {"text": "Non-http(s), internal, private-IP and credential-bearing URLs are rejected with 400", "verifiedBy": ["UrlValidatorTest#rejectsUnsafeOrMalformedUrls", "UrlApiIntegrationTest#validationErrorsAreProblemDetails"]}
+      ]
+    },
+    {
+      "id": "privacy",
+      "title": "Privacy-safe analytics",
+      "keywords": ["privacy", "pii", "gdpr", "privacy-safe"],
+      "components": ["analytics"],
+      "presentIf": "src/main/java/com/example/shortener/analytics/IpHasher.java",
+      "playbook": "reference",
+      "testPlaybook": "reference",
+      "criteria": [
+        {"text": "Visitor IPs are stored only as a salted HMAC; only referrer host and browser family are kept", "verifiedBy": ["AnalyticsHelpersTest#ipHashIsStableSaltedAndNotReversible", "ClickRecorderTest#capturesPrivacySafeAttributes"]}
+      ]
+    },
+    {
+      "id": "expiry",
+      "title": "Link expiration",
+      "keywords": ["expir", "ttl", "410"],
+      "components": ["domain", "service", "api", "idempotency", "db/migration"],
+      "needsMigration": true,
+      "presentIf": "src/main/java/com/example/shortener/domain/Expiry.java",
+      "playbook": "expiry",
+      "testPlaybook": "expiry-tests",
+      "criteria": [
+        {"text": "A link may carry an optional expiresAt; once reached, the redirect answers 410 Gone", "verifiedBy": ["LinkExpiryTest#expiredLinkIsGone", "LinkExpiryTest#notYetExpiredLinkStillResolves"]},
+        {"text": "Links without expiresAt never expire, and an expiresAt in the past is rejected with 400", "verifiedBy": ["LinkExpiryTest#linkWithoutExpiryNeverExpires", "LinkExpiryTest#rejectsExpiryInThePast"]}
+      ]
+    },
+    {
+      "id": "redirect-chain-block",
+      "title": "Block redirect chains",
+      "keywords": ["redirect chain", "other url shorteners", "other shorteners", "known shortener"],
+      "components": ["validation"],
+      "presentIf": "src/main/java/com/example/shortener/validation/UrlValidator.java::KNOWN_SHORTENERS",
+      "playbook": "denylist",
+      "testPlaybook": "denylist-tests",
+      "criteria": [
+        {"text": "Links to known third-party URL shorteners are rejected with 400, so a short link cannot hide its real destination", "verifiedBy": ["UrlValidatorDenylistTest#rejectsKnownShorteners", "UrlValidatorDenylistTest#stillAcceptsNormalDomains"]}
+      ]
+    },
+    {
+      "id": "ip-encoding-fix",
+      "title": "Fix SSRF bypass via alternative IP encodings",
+      "keywords": ["ip encoding", "alternative ip", "octal", "bypass"],
+      "components": ["validation"],
+      "presentIf": "src/main/java/com/example/shortener/validation/UrlValidator.java::NUMERIC_HOST",
+      "playbook": "ip-encoding-fix",
+      "testPlaybook": "ip-encoding-tests",
+      "criteria": [
+        {"text": "Hosts in non-canonical numeric IP notation (decimal, hex, octal, zero-padded) are rejected with 400, while canonical public IPs and hostnames still work", "verifiedBy": ["UrlValidatorEncodingTest#rejectsAlternativeIpEncodings", "UrlValidatorEncodingTest#stillAcceptsCanonicalPublicIpsAndHostnames"]}
+      ]
+    }
+  ],
+  "ambiguities": [
+    {
+      "id": "safety",
+      "terms": ["safer", "more secure", "more safe", "safety"],
+      "question": "'Safer' could mean several things. Which safety risk should this change address?",
+      "options": [
+        {"label": "Block links that point to other URL shorteners (redirect chains hide the destination)", "features": ["redirect-chain-block"], "requirementText": "Block links to known third-party URL shorteners to prevent redirect chains."},
+        {"label": "Make links expire automatically", "features": ["expiry"], "requirementText": "Links may carry an expiry; expired links answer 410."},
+        {"label": "Check targets against a phishing/malware threat feed", "features": [], "requirementText": "Integrate a third-party threat-intelligence feed (out of scope: needs an external vendor and a dependency review)."}
+      ]
+    },
+    {
+      "id": "visitor-data",
+      "terms": ["more stuff", "track more", "about visitors", "more data"],
+      "question": "Which additional visitor data is in scope for analytics?",
+      "options": [
+        {"label": "Keep today's privacy-safe aggregates (referrer host, browser family)", "features": ["privacy"], "requirementText": "Keep analytics privacy-safe: only referrer host and browser family."},
+        {"label": "Store each visitor's raw IP address for detailed tracking", "features": ["privacy"], "requirementText": "Store the raw IP address of every visitor."},
+        {"label": "Country-level geolocation (derived at click time, IP not stored)", "features": [], "requirementText": "Add country-level geolocation (out of scope: needs a licensed GeoIP database)."}
+      ]
+    }
+  ]
+}

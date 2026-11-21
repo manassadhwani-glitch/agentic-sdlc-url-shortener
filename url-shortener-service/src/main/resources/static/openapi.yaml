@@ -1,0 +1,189 @@
+openapi: 3.0.3
+info:
+  title: URL Shortener API
+  version: 1.0.0
+  description: |
+    Create short links, redirect, and read click analytics.
+    All `/api/**` endpoints require an `X-API-Key` header. Redirects are public.
+    Errors use RFC 7807 `application/problem+json`.
+servers:
+  - url: http://localhost:8080
+security:
+  - ApiKey: []
+
+paths:
+  /api/v1/urls:
+    post:
+      summary: Create a short link
+      operationId: createShortUrl
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Retry-safe key (scoped to the API key, kept 24h). Reusing it with a different body returns 422.
+          schema: { type: string, pattern: '^[A-Za-z0-9._:-]{1,128}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUrlRequest' }
+      responses:
+        '201':
+          description: Created (or replayed from a previous identical request)
+          headers:
+            Location: { schema: { type: string }, description: URI of the link resource }
+            Idempotent-Replayed: { schema: { type: boolean } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateUrlResponse' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /api/v1/urls/{code}:
+    parameters:
+      - $ref: '#/components/parameters/Code'
+    get:
+      summary: Get link metadata (owner only)
+      operationId: getShortUrl
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UrlDetails' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      summary: Disable a link (soft delete, owner only)
+      operationId: disableShortUrl
+      responses:
+        '204': { description: Disabled }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /api/v1/urls/{code}/stats:
+    parameters:
+      - $ref: '#/components/parameters/Code'
+    get:
+      summary: Click analytics for an inclusive UTC-day range (default last 30 days, max 366)
+      operationId: getShortUrlStats
+      parameters:
+        - { name: from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LinkStats' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /{code}:
+    parameters:
+      - $ref: '#/components/parameters/Code'
+    get:
+      summary: Redirect to the target URL
+      operationId: redirect
+      security: []
+      responses:
+        '302':
+          description: Found
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        '404': { $ref: '#/components/responses/Problem' }
+        '410': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    Code:
+      name: code
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{3,64}$' }
+
+  responses:
+    Problem:
+      description: Error
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After: { schema: { type: integer }, description: Seconds to wait }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    CreateUrlRequest:
+      type: object
+      required: [longUrl]
+      properties:
+        longUrl:
+          type: string
+          maxLength: 2048
+          description: Absolute http(s) URL. Private/loopback/link-local hosts, embedded credentials and links back to this service are rejected.
+          example: https://example.com/some/long/path
+        customAlias:
+          type: string
+          minLength: 3
+          maxLength: 64
+          pattern: '^[A-Za-z0-9_-]{3,64}$'
+          description: Optional. Must not be reserved, and must not be exactly 7 letters/digits (that shape is reserved for generated codes).
+          example: launch-2026
+    CreateUrlResponse:
+      type: object
+      properties:
+        shortCode: { type: string, example: 8eLEJn3 }
+        shortUrl: { type: string, example: http://localhost:8080/8eLEJn3 }
+        longUrl: { type: string }
+        createdAt: { type: string, format: date-time }
+    UrlDetails:
+      type: object
+      properties:
+        shortCode: { type: string }
+        shortUrl: { type: string }
+        longUrl: { type: string }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        customAlias: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    CountByKey:
+      type: object
+      properties:
+        key: { type: string }
+        clicks: { type: integer, format: int64 }
+    DailyCount:
+      type: object
+      properties:
+        day: { type: string, format: date }
+        clicks: { type: integer, format: int64 }
+    LinkStats:
+      type: object
+      properties:
+        shortCode: { type: string }
+        totalClicks: { type: integer, format: int64, description: All-time total }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        daily: { type: array, items: { $ref: '#/components/schemas/DailyCount' } }
+        topReferrers: { type: array, items: { $ref: '#/components/schemas/CountByKey' } }
+        userAgents: { type: array, items: { $ref: '#/components/schemas/CountByKey' } }
+    Problem:
+      type: object
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }

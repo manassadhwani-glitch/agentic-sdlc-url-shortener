@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: url-shortener-service
+  datasource:
+    url: jdbc:h2:mem:shortener;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none          # Flyway owns the schema
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+  flyway:
+    enabled: true
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+shortener:
+  base-url: http://localhost:8080
+  # Secret used to scramble sequential ids into non-guessable codes. Override in every real environment.
+  code-secret: "0x1F3A5C7E9B2D"
+  security:
+    # Comma-separated in env: SHORTENER_SECURITY_API_KEYS=key1,key2
+    api-keys:
+      - dev-key-change-me
+  validation:
+    resolve-dns: false        # true = also block hostnames that resolve to private IPs (needs network)
+  cache:
+    max-size: 100000
+    ttl: PT10M
+  rate-limit:
+    api-capacity: 20          # burst per API key (all /api calls)
+    api-refill-per-second: 5
+    redirect-capacity: 100    # burst per client IP
+    redirect-refill-per-second: 50
+  analytics:
+    queue-capacity: 10000
+    batch-size: 500
+    flush-interval-ms: 1000
+    ip-hash-salt: dev-salt-change-me
+  idempotency:
+    ttl: PT24H

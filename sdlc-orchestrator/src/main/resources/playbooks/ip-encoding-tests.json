@@ -1,0 +1,9 @@
+{
+  "changes": [
+    {
+      "path": "src/test/java/com/example/shortener/validation/UrlValidatorEncodingTest.java",
+      "op": "CREATE",
+      "content": "package com.example.shortener.validation;\n\nimport org.junit.jupiter.api.Test;\n\nimport java.util.List;\n\nimport static org.assertj.core.api.Assertions.assertThat;\nimport static org.assertj.core.api.Assertions.assertThatThrownBy;\n\n/**\n * Regression tests for the SSRF bypass via alternative IPv4 encodings. Every rejected URL below is an internal\n * address (127.0.0.1, 10.0.0.1 or 192.168.0.1) to a browser or HTTP client, even though it doesn't look like one.\n */\nclass UrlValidatorEncodingTest {\n\n    private final UrlValidator validator = new UrlValidator(\"sho.rt\", false);\n\n    @Test\n    void rejectsAlternativeIpEncodings() {\n        for (String url : List.of(\n                \"http://2130706433/\",        // decimal 127.0.0.1\n                \"http://0x7f000001/\",        // hex 127.0.0.1\n                \"http://0177.0.0.1/\",        // octal 127.0.0.1\n                \"http://017700000001/\",      // octal, single number\n                \"http://0x0a000001/\",        // hex 10.0.0.1\n                \"http://3232235521/\",        // decimal 192.168.0.1\n                \"http://127.000.000.001/\")) { // zero-padded\n            assertThatThrownBy(() -> validator.validate(url)).as(url).isInstanceOf(InvalidUrlException.class);\n        }\n    }\n\n    @Test\n    void stillAcceptsCanonicalPublicIpsAndHostnames() {\n        for (String url : List.of(\"http://8.8.8.8/\", \"https://93.184.216.34/\", \"https://example.com/\",\n                \"https://1password.com/\", \"https://123.example.org/\")) {\n            assertThat(validator.validate(url)).as(url).isEqualTo(url);\n        }\n    }\n}\n"
+    }
+  ]
+}

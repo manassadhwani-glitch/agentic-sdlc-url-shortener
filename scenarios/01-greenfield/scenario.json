@@ -1,0 +1,15 @@
+{
+  "name": "greenfield",
+  "description": "Build the URL shortener from an empty workspace. Shows: full DAG, parallel implement ‖ test-design, design rejected once and reworked, policy-gated large change sets, release sign-off.",
+  "requirement": "Build a URL shortener service: shorten long URLs (with optional custom aliases), redirect visitors, and provide click analytics/stats. The create API must be idempotent and rate limited, protect against unsafe URLs (SSRF), and keep analytics privacy-safe.",
+  "referenceDir": "url-shortener-service",
+  "testCommand": "mvn -q -B test",
+  "initiator": "manas",
+  "script": [
+    {"type": "reject", "stage": "design", "as": "alice", "comment": "Please document the cache invalidation strategy and why we redirect with 302 instead of 301."},
+    {"type": "approve", "stage": "design", "as": "alice", "comment": "Cache and 302 rationale now covered."},
+    {"type": "approve", "stage": "implement", "as": "alice", "comment": "Initial code drop reviewed."},
+    {"type": "approve", "stage": "test-design", "as": "alice", "comment": "Test suite reviewed."},
+    {"type": "approve", "stage": "release", "as": "rahul", "comment": "Ship it."}
+  ]
+}

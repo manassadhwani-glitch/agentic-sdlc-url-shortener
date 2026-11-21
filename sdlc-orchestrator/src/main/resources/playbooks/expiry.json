@@ -1,0 +1,102 @@
+{
+  "changes": [
+    {
+      "path": "src/main/resources/db/migration/V2__link_expiry.sql",
+      "op": "CREATE",
+      "content": "-- V2: optional link expiry.\n-- Additive and nullable: existing rows stay valid and the previous application version keeps working.\n-- Rollback: redeploy the previous version (it ignores this column); remove the column in a later release.\nALTER TABLE short_url ADD COLUMN expires_at TIMESTAMP WITH TIME ZONE;\n"
+    },
+    {
+      "path": "src/main/java/com/example/shortener/domain/Expiry.java",
+      "op": "CREATE",
+      "content": "package com.example.shortener.domain;\n\nimport java.time.Instant;\n\n/** Single source of truth for expiry semantics, shared by the entity, the cache entry and the service. */\npublic final class Expiry {\n\n    private Expiry() {\n    }\n\n    /** A link is expired from its expiry instant onwards (inclusive). Links without an expiry never expire. */\n    public static boolean isExpired(Instant expiresAt, Instant now) {\n        return expiresAt != null && !now.isBefore(expiresAt);\n    }\n}\n"
+    },
+    {
+      "path": "src/main/java/com/example/shortener/domain/ShortUrl.java",
+      "op": "EDIT",
+      "edits": [
+        {
+          "find": "    @Column(name = \"created_at\", nullable = false)\n    private Instant createdAt;\n",
+          "replace": "    @Column(name = \"created_at\", nullable = false)\n    private Instant createdAt;\n\n    /** Optional; null means the link never expires. */\n    @Column(name = \"expires_at\")\n    private Instant expiresAt;\n"
+        },
+        {
+          "find": "    public void disable() {\n        this.status = LinkStatus.DISABLED;\n    }\n",
+          "replace": "    public void disable() {\n        this.status = LinkStatus.DISABLED;\n    }\n\n    public void expireAt(Instant when) {\n        this.expiresAt = when;\n    }\n\n    public boolean isExpired(Instant now) {\n        return Expiry.isExpired(expiresAt, now);\n    }\n"
+        },
+        {
+          "find": "    public Instant getCreatedAt() {\n        return createdAt;\n    }\n",
+          "replace": "    public Instant getCreatedAt() {\n        return createdAt;\n    }\n\n    public Instant getExpiresAt() {\n        return expiresAt;\n    }\n"
+        }
+      ]
+    },
+    {
+      "path": "src/main/java/com/example/shortener/service/CachedLink.java",
+      "op": "REPLACE",
+      "content": "package com.example.shortener.service;\n\nimport com.example.shortener.domain.Expiry;\nimport com.example.shortener.domain.LinkStatus;\nimport com.example.shortener.domain.ShortUrl;\n\nimport java.time.Instant;\n\n/** Immutable, cache-friendly view of a link: only what the redirect path needs. */\npublic record CachedLink(long id, String longUrl, LinkStatus status, Instant expiresAt) {\n\n    public static CachedLink from(ShortUrl link) {\n        return new CachedLink(link.getId(), link.getLongUrl(), link.getStatus(), link.getExpiresAt());\n    }\n\n    /** Expiry is re-evaluated on every redirect, so a cached entry can never outlive its expiry. */\n    public boolean isExpired(Instant now) {\n        return Expiry.isExpired(expiresAt, now);\n    }\n}\n"
+    },
+    {
+      "path": "src/main/java/com/example/shortener/service/ShortUrlService.java",
+      "op": "EDIT",
+      "edits": [
+        {
+          "find": "import java.time.Clock;\n",
+          "replace": "import java.time.Clock;\nimport java.time.Instant;\n"
+        },
+        {
+          "find": "    @Transactional\n    public ShortUrl create(String longUrl, String customAlias, String ownerKeyId) {\n        String target = urlValidator.validate(longUrl);\n",
+          "replace": "    @Transactional\n    public ShortUrl create(String longUrl, String customAlias, String ownerKeyId) {\n        return create(longUrl, customAlias, ownerKeyId, null);\n    }\n\n    /** Creates a link that answers 410 once {@code expiresAt} is reached; null means it never expires. */\n    @Transactional\n    public ShortUrl create(String longUrl, String customAlias, String ownerKeyId, Instant expiresAt) {\n        if (expiresAt != null && !expiresAt.isAfter(clock.instant())) {\n            throw new BadRequestException(\"expiresAt must be in the future\");\n        }\n        String target = urlValidator.validate(longUrl);\n"
+        },
+        {
+          "find": "            return repository.saveAndFlush(ShortUrl.withAlias(target, customAlias, ownerKeyId, clock.instant()));\n",
+          "replace": "            ShortUrl aliased = ShortUrl.withAlias(target, customAlias, ownerKeyId, clock.instant());\n            aliased.expireAt(expiresAt);\n            return repository.saveAndFlush(aliased);\n"
+        },
+        {
+          "find": "        ShortUrl link = repository.saveAndFlush(ShortUrl.generated(target, ownerKeyId, clock.instant()));\n",
+          "replace": "        ShortUrl fresh = ShortUrl.generated(target, ownerKeyId, clock.instant());\n        fresh.expireAt(expiresAt);\n        ShortUrl link = repository.saveAndFlush(fresh);\n"
+        },
+        {
+          "find": "        if (link.status() != LinkStatus.ACTIVE) {\n            throw new LinkGoneException(code);\n        }\n",
+          "replace": "        if (link.status() != LinkStatus.ACTIVE || link.isExpired(clock.instant())) {\n            throw new LinkGoneException(code);\n        }\n"
+        }
+      ]
+    },
+    {
+      "path": "src/main/java/com/example/shortener/api/dto/CreateUrlRequest.java",
+      "op": "REPLACE",
+      "content": "package com.example.shortener.api.dto;\n\nimport jakarta.validation.constraints.NotBlank;\nimport jakarta.validation.constraints.Size;\n\nimport java.time.Instant;\n\n/**\n * Bean Validation does the cheap shape checks here. The semantic rules (scheme, host, SSRF, alias namespace,\n * expiry in the future) live in the service layer, so they also apply to callers that don't go through HTTP.\n */\npublic record CreateUrlRequest(\n        @NotBlank @Size(max = 2048) String longUrl,\n        @Size(min = 3, max = 64) String customAlias,\n        Instant expiresAt) {\n\n    /** Backwards-compatible constructor: no expiry. */\n    public CreateUrlRequest(String longUrl, String customAlias) {\n        this(longUrl, customAlias, null);\n    }\n\n    /** Treats a blank alias as \"no alias\". */\n    public String normalizedAlias() {\n        return customAlias == null || customAlias.isBlank() ? null : customAlias.trim();\n    }\n}\n"
+    },
+    {
+      "path": "src/main/java/com/example/shortener/api/dto/CreateUrlResponse.java",
+      "op": "REPLACE",
+      "content": "package com.example.shortener.api.dto;\n\nimport com.example.shortener.domain.ShortUrl;\n\nimport java.time.Instant;\n\npublic record CreateUrlResponse(String shortCode, String shortUrl, String longUrl, Instant createdAt, Instant expiresAt) {\n\n    public static CreateUrlResponse from(ShortUrl link, String baseUrl) {\n        return new CreateUrlResponse(link.getShortCode(), baseUrl + \"/\" + link.getShortCode(),\n                link.getLongUrl(), link.getCreatedAt(), link.getExpiresAt());\n    }\n}\n"
+    },
+    {
+      "path": "src/main/java/com/example/shortener/api/dto/UrlDetailsResponse.java",
+      "op": "REPLACE",
+      "content": "package com.example.shortener.api.dto;\n\nimport com.example.shortener.domain.LinkStatus;\nimport com.example.shortener.domain.ShortUrl;\n\nimport java.time.Instant;\n\npublic record UrlDetailsResponse(String shortCode, String shortUrl, String longUrl, LinkStatus status,\n                                 boolean customAlias, Instant createdAt, Instant expiresAt) {\n\n    public static UrlDetailsResponse from(ShortUrl link, String baseUrl) {\n        return new UrlDetailsResponse(link.getShortCode(), baseUrl + \"/\" + link.getShortCode(), link.getLongUrl(),\n                link.getStatus(), link.isCustomAlias(), link.getCreatedAt(), link.getExpiresAt());\n    }\n}\n"
+    },
+    {
+      "path": "src/main/java/com/example/shortener/idempotency/LinkCreationFacade.java",
+      "op": "EDIT",
+      "edits": [
+        {
+          "find": "shortUrlService.create(request.longUrl(), alias, ownerKeyId), baseUrl)",
+          "replace": "shortUrlService.create(request.longUrl(), alias, ownerKeyId, request.expiresAt()), baseUrl)"
+        },
+        {
+          "find": "String requestHash = hash(request.longUrl().trim() + '\\u0000' + (alias == null ? \"\" : alias));",
+          "replace": "String requestHash = hash(request.longUrl().trim() + '\\u0000' + (alias == null ? \"\" : alias)\n                + '\\u0000' + request.expiresAt());"
+        }
+      ]
+    },
+    {
+      "path": "src/main/resources/static/openapi.yaml",
+      "op": "EDIT",
+      "edits": [
+        {
+          "find": "          example: launch-2026\n    CreateUrlResponse:",
+          "replace": "          example: launch-2026\n        expiresAt:\n          type: string\n          format: date-time\n          description: Optional. Must be in the future. Once reached, the redirect answers 410 Gone.\n    CreateUrlResponse:"
+        }
+      ]
+    }
+  ]
+}
