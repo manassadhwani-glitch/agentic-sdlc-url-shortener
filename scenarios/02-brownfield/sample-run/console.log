@@ -1,0 +1,53 @@
+$ java -jar sdlc-orchestrator/target/sdlc-orchestrator.jar demo scenarios/02-brownfield/scenario.json --llm off
+══ brownfield: Add link expiry to the existing service. Shows: impact analysis on real code, planner inserts a migration-check stage at runtime, schema change needs tech-lead approval, injected first-attempt bug caught by tests → journal rollback → rework → re-approval → recovery (MTTR).
+▶ run run-20261121-030332-brownfield-8444 started (9 stages, llm: offline (deterministic agents))
+  → requirements started (attempt 1)
+  ✔ requirements succeeded
+  → design started (attempt 1)
+  ⏸ design awaiting sign-off A-1 (role tech-lead)
+⏸ run PAUSED, waiting for a human: A-1 (design, role tech-lead)
+  👤 alice approves A-1 (design, tech-lead): "Additive nullable column, expand/contract. Approved."
+  ✔ design approved by [alice]
+▶ resuming run-20261121-030332-brownfield-8444
+  → plan started (attempt 1)
+  + planner added stage 'migration-check': design introduces a schema migration [V2 (additive, for expiry)]
+  ✔ plan succeeded
+  → implement started (attempt 1)
+  → test-design started (attempt 1)
+  ⏸ implement change set needs approval A-2 (role tech-lead): [CHG-001 [REQUIRE_APPROVAL] database schema change (src/main/resources/db/migration/V2__link_expiry.sql)]
+  ✔ test-design succeeded
+⏸ run PAUSED, waiting for a human: A-2 (implement, role tech-lead)
+  👤 alice approves A-2 (implement, tech-lead): "Migration V2 reviewed."
+  ✔ implement approved by [alice]
+▶ resuming run-20261121-030332-brownfield-8444
+  → implement started (attempt 2, applying approved change set)
+  ✔ implement succeeded (attempt 2)
+  → migration-check started (attempt 1)
+  ✔ migration-check succeeded
+  → verify started (attempt 1)
+  ✖ verify attempt 1 failed: gate tests-pass failed: 2 of 104 tests failing → LinkExpiryTest#expiredLinkIsGone: Expecting code to raise a throwable.; LinkExpiryTest#notYetExpiredLinkStillRe…
+  ↻ routing back to implement (rework 1/2)
+  → implement started (attempt 1)
+  ⏸ implement change set needs approval A-3 (role tech-lead): [CHG-001 [REQUIRE_APPROVAL] database schema change (src/main/resources/db/migration/V2__link_expiry.sql)]
+⏸ run PAUSED, waiting for a human: A-3 (implement, role tech-lead)
+  👤 alice approves A-3 (implement, tech-lead): "Re-reviewed the corrected change set."
+  ✔ implement approved by [alice]
+▶ resuming run-20261121-030332-brownfield-8444
+  → implement started (attempt 2, applying approved change set)
+  ✔ implement succeeded (attempt 2)
+  ↻ migration-check invalidated: code-changes v1 → v2
+  → migration-check started (attempt 1)
+  ✔ migration-check succeeded
+  → verify started (attempt 1)
+  ✔ verify succeeded
+  → security started (attempt 1)
+  → docs started (attempt 1)
+  ✔ docs succeeded
+  ✔ security succeeded
+  → release started (attempt 1)
+  ⏸ release awaiting sign-off A-4 (role release-manager)
+⏸ run PAUSED, waiting for a human: A-4 (release, role release-manager)
+  👤 rahul approves A-4 (release, release-manager): "Release approved."
+  ✔ release approved by [rahul]
+▶ resuming run-20261121-030332-brownfield-8444
+✔ run SUCCEEDED

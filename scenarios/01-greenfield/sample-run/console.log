@@ -1,0 +1,46 @@
+$ java -jar sdlc-orchestrator/target/sdlc-orchestrator.jar demo scenarios/01-greenfield/scenario.json --llm off
+══ greenfield: Build the URL shortener from an empty workspace. Shows: full DAG, parallel implement ‖ test-design, design rejected once and reworked, policy-gated large change sets, release sign-off.
+▶ run run-20261121-030255-greenfield-635f started (9 stages, llm: offline (deterministic agents))
+  → requirements started (attempt 1)
+  ✔ requirements succeeded
+  → design started (attempt 1)
+  ⏸ design awaiting sign-off A-1 (role tech-lead)
+⏸ run PAUSED, waiting for a human: A-1 (design, role tech-lead)
+  👤 alice rejects A-1 (design, tech-lead): "Please document the cache invalidation strategy and why we redirect with 302 instead of 301."
+  ↻ design will be reworked: Please document the cache invalidation strategy and why we redirect with 302 instead of 301.
+▶ resuming run-20261121-030255-greenfield-635f
+  → design started (attempt 1)
+  ⏸ design awaiting sign-off A-2 (role tech-lead)
+⏸ run PAUSED, waiting for a human: A-2 (design, role tech-lead)
+  👤 alice approves A-2 (design, tech-lead): "Cache and 302 rationale now covered."
+  ✔ design approved by [alice]
+▶ resuming run-20261121-030255-greenfield-635f
+  → plan started (attempt 1)
+  ✔ plan succeeded
+  → implement started (attempt 1)
+  → test-design started (attempt 1)
+  ⏸ test-design change set needs approval A-3 (role tech-lead): [CHG-004 [REQUIRE_APPROVAL] large change: 964 lines (limit 400)]
+  ⏸ implement change set needs approval A-4 (role tech-lead): [CHG-001 [REQUIRE_APPROVAL] database schema change (src/main/resources/db/migration/V1__init.sql), CHG-004 [REQUIRE_APPROVAL] large change: 2411 lines (limit 400)]
+⏸ run PAUSED, waiting for a human: A-3 (test-design, role tech-lead), A-4 (implement, role tech-lead)
+  👤 alice approves A-4 (implement, tech-lead): "Initial code drop reviewed."
+  👤 alice approves A-3 (test-design, tech-lead): "Test suite reviewed."
+  ✔ implement approved by [alice]
+  ✔ test-design approved by [alice]
+▶ resuming run-20261121-030255-greenfield-635f
+  → implement started (attempt 2, applying approved change set)
+  → test-design started (attempt 2, applying approved change set)
+  ✔ implement succeeded (attempt 2)
+  ✔ test-design succeeded (attempt 2)
+  → verify started (attempt 1)
+  ✔ verify succeeded
+  → security started (attempt 1)
+  → docs started (attempt 1)
+  ✔ docs succeeded
+  ✔ security succeeded
+  → release started (attempt 1)
+  ⏸ release awaiting sign-off A-5 (role release-manager)
+⏸ run PAUSED, waiting for a human: A-5 (release, role release-manager)
+  👤 rahul approves A-5 (release, release-manager): "Ship it."
+  ✔ release approved by [rahul]
+▶ resuming run-20261121-030255-greenfield-635f
+✔ run SUCCEEDED
